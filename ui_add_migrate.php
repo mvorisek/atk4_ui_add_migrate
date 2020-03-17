@@ -129,7 +129,13 @@ $refactorFunc = function(string $dat) use($astParseFunc, $classes): string {
                             };
                             if ($argSeed instanceof Node\Scalar\String_) {
                                 $cl = $getClFunc($argSeed);
-                                $dExclAdd = '-';
+                                $dExclAdd = '[], ' . $replaceInside($dExclAdd, $dExclAddOffset, $argSeed->getStartFilePos(), $argSeed->getEndFilePos(), function($parts) {
+                                    return $parts[0] . preg_replace('~^\s*,\s*~', '', $parts[2]);
+                                });
+
+                                if (count($node->args) === 1) {
+                                    $dExclAdd = '-';
+                                }
                             } elseif ($argSeed instanceof Node\Expr\Array_ && count($argSeed->items) > 0) {
                                 $i0 = $argSeed->items[0];
                                 $i0Val = $argSeed->items[0]->value;
