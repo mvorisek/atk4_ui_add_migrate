@@ -1,0 +1,6 @@
+{
+    "require": {
+        "hanneskod/classtools": "^1.2",
+        "rector/rector": "^0.7.6"
+    }
+}
