@@ -63,3 +63,13 @@ function updateKeysWithRelPath(array $paths, string $baseDir, bool $allowBaseDir
 function getDirContentsWithRelKeys(string $dir, string $excludeRegex = '~/\.git/~', int $onlyFiles = 0, int $maxDepth = -1): array {
     return updateKeysWithRelPath(getDirContents($dir, $excludeRegex, $onlyFiles, $maxDepth), $dir);
 }
+
+function discoverClasses(string $fileName): array {
+    $reader = new \hanneskod\classtools\Transformer\Reader(file_get_contents($fileName));
+    $classNames = [];
+    foreach ($reader->getDefinitionNames() as $name) {
+        $classNames[] = $name;
+    }
+
+    return $classNames;
+}
