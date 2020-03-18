@@ -72,7 +72,11 @@ $refactorFunc = function(string $dat) use($astParseFunc, $classes): string {
             public function __construct($dat, array $classes) {
                 $this->datOrig = $dat;
                 $this->dat = $dat;
-                $this->classes = $classes;
+
+                $this->classes = [];
+                foreach ($classes as $cl) {
+                    $this->classes[mb_strtolower($cl)] = $cl;
+                }
             }
 
             public function enterNode(Node $node) {
@@ -182,11 +186,14 @@ $refactorFunc = function(string $dat) use($astParseFunc, $classes): string {
                 }
 
                 $fqCl = $this->normalizeClassName($name, '\atk4\ui');
-                if (!in_array($fqCl, $this->classes)) {
+                if (!isset($this->classes[mb_strtolower($fqCl)])) {
                     $fqCl = $this->normalizeClassName($name, $targetNamespace);
-                    if (!in_array($fqCl, $this->classes)) {
+                    if (!isset($this->classes[mb_strtolower($fqCl)])) {
                         throw new \Exception('"' . $name . '" can not be resolved to an UI class');
                     }
+                }
+                if ($fqCl !== $this->classes[mb_strtolower($fqCl)]) {
+                    throw new \Exception('"' . $name . '" has bad case');
                 }
                 $fqNs = $this->normalizeClassName('\\' . $targetNamespace, '\\');
 
