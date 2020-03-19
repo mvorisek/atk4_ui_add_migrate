@@ -178,6 +178,10 @@ $refactorFunc = function(string $dat) use($astParseFunc, $classes): string {
             }
 
             protected function buildClassName(string $name, string $targetNamespace = null, $returnAbs = false): string {
+                if ($name === 'self' || $name === 'static') {
+                    return $name;
+                }
+
                 foreach ($this->uses as $k => $v) {
                     if (mb_strtolower($name) === mb_strtolower($k)) {
                         $name = '\\' . $v;
@@ -229,12 +233,27 @@ foreach (array_keys($phpFiles) as $phpFileRel) {
     $destFile = $destDir . '/' . $phpFileRel;
 
     $datOrig = file_get_contents($srcFile);
-    echo '--> ' . $srcFile . "\n";
-    $dumper = new NodeDumper;
-    // echo $dumper->dump($astParseFunc($datOrig)) . "\n";
+    $nameDisplayed = false;
+    ob_start(function($v) use(&$nameDisplayed, $srcFile) {
+        if (strlen($v) > 0) {
+            if (!$nameDisplayed) {
+                $v = '--> ' . $srcFile . "\n" . $v;
+            }
+            $nameDisplayed = true;
+        }
+        return $v;
+    });
+    try {
+        $dumper = new NodeDumper;
+        // echo $dumper->dump($astParseFunc($datOrig)) . "\n";
 
-    $dat = $refactorFunc($datOrig);
+        $dat = $refactorFunc($datOrig);
 
-    file_put_contents($destFile, $dat);
-    echo "\n\n";
+        file_put_contents($destFile, $dat);
+    } finally {
+        ob_end_flush();
+        if ($nameDisplayed) {
+            echo "\n\n";
+        }
+    }
 }
