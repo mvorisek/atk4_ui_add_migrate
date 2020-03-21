@@ -196,6 +196,8 @@ $refactorFunc = function(string $dat) use($astParseFunc, $classes): string {
                                     . $addParentStr . ($dExclAdd !== '-' ? ', ' . $dExclAdd : ')');
                         }
                     } elseif ($node->name->name === 'onHook' || $node->name->name === 'addHook') {
+                        // migrate ->onHook(..., ..., null, ...)
+                        // to      ->onHook(..., ..., [], ...)
                         if (count($node->args) >= 3) {
                             $argHookArgs = $node->args[2]->value;
                             if ($argHookArgs instanceof Node\Expr\ConstFetch) {
@@ -205,6 +207,17 @@ $refactorFunc = function(string $dat) use($astParseFunc, $classes): string {
                                     });
                                 }
                             }
+                        }
+
+                        // find ->onHook(...) calls that have return value usage
+                        /* @var $parent Node */
+                        $parent = $node->getAttribute('parent');
+                        $parentSemicolon = substr($this->dat, $parent->getEndFilePos(), 1); // for the latest atk4/data always equal to ";"
+                        if ($parent !== null&& preg_match('~(?<=\n|^)\s*\S\s*$~', substr($this->dat, 0, $parent->getStartFilePos()))) {
+
+                            var_dump(get_class($parent));
+                            var_dump($sub($this->dat, $parent->getStartFilePos(), $parent->getEndFilePos()));
+                            var_dump($node->getStartLine());
                         }
                     }
 
