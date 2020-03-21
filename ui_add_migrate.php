@@ -157,7 +157,9 @@ $refactorFunc = function(string $dat) use($astParseFunc, $classes): string {
                         }
 
                         if ($cl !== null) {
-                            $d = $cl . '::addTo(' . $addParentStr . ($dExclAdd !== '-' ? ', ' . $dExclAdd : ')');
+                            $d = $cl . '::addTo'
+                                    . $sub($this->dat, $node->name->getEndFilePos() + 1, $argSeed->getStartFilePos() - 1)
+                                    . $addParentStr . ($dExclAdd !== '-' ? ', ' . $dExclAdd : ')');
                         }
 
                         var_dump($dOrig);
