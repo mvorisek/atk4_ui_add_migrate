@@ -69,6 +69,8 @@ $refactorFunc = function(string $dat) use($astParseFunc, $classes): string {
             public $ns;
             public $uses = [];
 
+            private $stack;
+
             public function __construct($dat, array $classes) {
                 $this->datOrig = $dat;
                 $this->dat = $dat;
@@ -79,7 +81,16 @@ $refactorFunc = function(string $dat) use($astParseFunc, $classes): string {
                 }
             }
 
+            public function beforeTraverse(array $nodes) {
+                $this->stack = [];
+            }
+
             public function enterNode(Node $node) {
+                if (!empty($this->stack)) {
+                    $node->setAttribute('parent', $this->stack[count($this->stack)-1]);
+                }
+                $this->stack[] = $node;
+
                 if ($node instanceof Node\Stmt\Namespace_) {
                     $this->ns = implode('\\', $node->name->parts);
                 } elseif ($node instanceof Node\Stmt\Use_) {
@@ -194,6 +205,10 @@ $refactorFunc = function(string $dat) use($astParseFunc, $classes): string {
                                 . $d . substr($this->dat, $node->getEndFilePos() + 1);
                     }
                 }
+            }
+
+            public function leaveNode(Node $node) {
+                array_pop($this->stack);
             }
 
             protected function normalizeClassName(string $name, $prefix = '\\') {
