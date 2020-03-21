@@ -162,9 +162,11 @@ $refactorFunc = function(string $dat) use($astParseFunc, $classes): string {
                                     . $addParentStr . ($dExclAdd !== '-' ? ', ' . $dExclAdd : ')');
                         }
 
-                        var_dump($dOrig);
-                        var_dump($d);
-                        echo "\n";
+                        if ($d !== $dOrig) {
+                            var_dump($dOrig);
+                            var_dump($d);
+                            echo "\n";
+                        }
 
 
                         $this->dat = substr($this->dat, 0, $node->getStartFilePos())
