@@ -153,6 +153,28 @@ $refactorFunc = function(string $dat) use($astParseFunc, $classes): string {
                                         $dExclAdd = '-';
                                     }
                                 }
+                            } elseif ($argSeed instanceof Node\Expr\New_) {
+                                $cl = $this->buildClassName(implode('\\', $argSeed->class->parts), $this->ns);
+                                $dExclAdd = $replaceInside($dExclAdd, $dExclAddOffset, $argSeed->getStartFilePos(), $argSeed->getEndFilePos(), function($parts)
+                                        use(&$cl, $argSeed, $node, $replaceInside, $dExclAdd, $dExclAddOffset) {
+                                    if (count($argSeed->args) === 0) {
+                                        if (count($node->args) === 1) {
+                                            return '-';
+                                        } else {
+                                            $arrSeedStr = '[]';
+                                        }
+                                    } else { // this can break code, but as we are refactoring only add of \atk4\ui\* classes we expect some construtors behaviour
+                                        $arrSeedStr = $replaceInside($dExclAdd, $dExclAddOffset, reset($argSeed->args)->getStartFilePos(), end($argSeed->args)->getEndFilePos(), function($parts) {
+                                            return $parts[1];
+                                        });
+                                        if (!(count($argSeed->args) === 1 && $argSeed->args[0]->value instanceof Node\Expr\Array_)) {
+                                            $arrSeedStr = '[' . $arrSeedStr . ']';
+                                            // $cl = null; return; // debug, do nothing
+                                        }
+                                    }
+
+                                    return $parts[0] . $arrSeedStr . (count($node->args) === 1 ? '' : ', ') . preg_replace('~^\s*,\s*~', '', $parts[2]);
+                                });
                             }
                         }
 
