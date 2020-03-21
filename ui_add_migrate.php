@@ -5,8 +5,8 @@ namespace Refactor;
 require_once __DIR__ . '/vendor/autoload.php';
 require_once __DIR__ . '/libs.php';
 
-$srcDir = 'C:\sync\wlocal\kelly-atk\mvorisek-php-atk\vendor\mahalux\atk4-ui-cust';
-$destDir = 'C:\Users\mvorisek\Desktop\dequ\atk4_ui\atk4_ui';
+$srcDir = 'C:\sync\wlocal\kelly-atk\mvorisek-php-atk\vendor\atk4\data';
+$destDir = 'C:\Users\mvorisek\Desktop\dequ\atk4_ui\data';
 
 // find all classes
 $phpFiles = getDirContentsWithRelKeys($srcDir, '~/(?:\.git|(?<!mvorisek-php-atk/)vendor)/|(?<!/|\.php)$~is', 1);
@@ -120,6 +120,7 @@ $refactorFunc = function(string $dat) use($astParseFunc, $classes): string {
                     $d = $dOrig;
 
                     if ($node->name->name === 'add') { // there is no other add() method than View::add(), no need to further check
+                        return; // @TODO ignore add() migr for this branch
                         $addParentStr = $sub($this->dat, $node->getStartFilePos(), $node->var->getEndFilePos());
 
                         $cl = null;
@@ -193,6 +194,17 @@ $refactorFunc = function(string $dat) use($astParseFunc, $classes): string {
                             $d = $cl . '::addTo'
                                     . $sub($this->dat, $node->name->getEndFilePos() + 1, $argSeed->getStartFilePos() - 1)
                                     . $addParentStr . ($dExclAdd !== '-' ? ', ' . $dExclAdd : ')');
+                        }
+                    } elseif ($node->name->name === 'onHook' || $node->name->name === 'addHook') {
+                        if (count($node->args) >= 3) {
+                            $argHookArgs = $node->args[2]->value;
+                            if ($argHookArgs instanceof Node\Expr\ConstFetch) {
+                                if ($argHookArgs->name->parts[0] === 'null') {
+                                    $d = $replaceInside($d, $dOffset, $argHookArgs->getStartFilePos(), $argHookArgs->getEndFilePos(), function($parts) {
+                                        return $parts[0] . '[]' . $parts[2];
+                                    });
+                                }
+                            }
                         }
                     }
 
