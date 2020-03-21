@@ -9,8 +9,14 @@ $srcDir = 'C:\sync\wlocal\kelly-atk\mvorisek-php-atk\vendor\mahalux\atk4-ui-cust
 $destDir = 'C:\Users\mvorisek\Desktop\dequ\atk4_ui\atk4_ui';
 
 // find all classes
-$phpFiles = getDirContentsWithRelKeys($srcDir, '~/(?:\.git|(?<!mvorisek-php-atk/)vendor)/|(?<!/|\.php)$~is', 1);
-$classesAll = array_filter(array_map(function($f) { return discoverClasses($f); }, $phpFiles), function($v) { return count($v) > 0; });
+$filesToFix = getDirContentsWithRelKeys($srcDir, '~/(?:\.git|(?<!mvorisek-php-atk/)vendor)/|(?<!/|\.php)(?<!/|\.rst)(?<!/|\.md)$~is', 1);
+$classesAll = array_filter(array_map(function($f) {
+    if (!preg_match('~\.php$~s', $f)) {
+        return [];
+    }
+
+    return discoverClasses($f);
+}, $filesToFix), function($v) { return count($v) > 0; });
 $classes = [];
 foreach ($classesAll as $k => $cls) {
     if (preg_match('~^src[/\\\\]~', $k)) {
@@ -268,9 +274,9 @@ $refactorFunc = function(string $dat) use($astParseFunc, $classes): string {
 };
 
 $cc = 0;
-foreach (array_keys($phpFiles) as $phpFileRel) {
-    $srcFile = $srcDir . '/' . $phpFileRel;
-    $destFile = $destDir . '/' . $phpFileRel;
+foreach (array_keys($filesToFix) as $fileRel) {
+    $srcFile = $srcDir . '/' . $fileRel;
+    $destFile = $destDir . '/' . $fileRel;
 
     $datOrig = file_get_contents($srcFile);
     $nameDisplayed = false;
@@ -284,10 +290,23 @@ foreach (array_keys($phpFiles) as $phpFileRel) {
         return $v;
     });
     try {
-        $dumper = new NodeDumper;
-        // echo $dumper->dump($astParseFunc($datOrig)) . "\n";
+        $dat = $datOrig;
+        if (preg_match('~\.php$~s', $fileRel)) {
+            $dumper = new NodeDumper;
+            // echo $dumper->dump($astParseFunc($datOrig)) . "\n";
 
-        $dat = $refactorFunc($datOrig);
+            $dat = $refactorFunc($dat);
+        }
+
+        // fix comments, .md/.rst files
+        $dat = preg_replace_callback('~(?<=^|\n|//)(?: *\*)?\K[^\n]+->add\(.+?\);~isu', function($matches) use($refactorFunc, $dat) {
+            try {
+                $phpHeader = '<?php' . "\n" . (preg_match('~namespace(?:::)? +(atk4\\\\ui[^;\n]*?)(?:;|\n)~', $dat, $nsm) ? 'namespace ' . $nsm[1] . ';' . "\n" : '');
+                return preg_replace('~^' . preg_quote($phpHeader, '~') . '~isu', '', $refactorFunc($phpHeader . $matches[0]), 1);
+            } catch (\Exception $e) {
+                return $matches[0]; // do nothing if parse has failed
+            }
+        }, $dat);
 
         file_put_contents($destFile, $dat);
     } finally {
