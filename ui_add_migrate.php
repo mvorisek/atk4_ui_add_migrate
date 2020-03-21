@@ -92,23 +92,23 @@ $refactorFunc = function(string $dat) use($astParseFunc, $classes): string {
                         return;
                     }
 
+                    $sub = function($str, $startPos, $endPos) {
+                        return substr($str, $startPos, $endPos - $startPos + 1);
+                    };
+                    $replaceInside = function($d, $dOffset, $startPos, $endPos, callable $replFx) {
+                        $parts = [
+                            substr($d, 0, $startPos - $dOffset),
+                            substr($d, $startPos - $dOffset, $endPos - $startPos + 1),
+                            substr($d, $endPos - $dOffset + 1)
+                        ];
+                        return $replFx($parts);
+                    };
+
+                    $dOffset = $node->getStartFilePos();
+                    $dOrig = $sub($this->dat, $dOffset, $node->getEndFilePos());
+                    $d = $dOrig;
+
                     if ($node->name->name === 'add') { // there is no other add() method than View::add(), no need to further check
-                        $sub = function($str, $startPos, $endPos) {
-                            return substr($str, $startPos, $endPos - $startPos + 1);
-                        };
-                        $replaceInside = function($d, $dOffset, $startPos, $endPos, callable $replFx) {
-                            $parts = [
-                                substr($d, 0, $startPos - $dOffset),
-                                substr($d, $startPos - $dOffset, $endPos - $startPos + 1),
-                                substr($d, $endPos - $dOffset + 1)
-                            ];
-                            return $replFx($parts);
-                        };
-
-                        $dOffset = $node->getStartFilePos();
-                        $dOrig = $sub($this->dat, $dOffset, $node->getEndFilePos());
-                        $d = $dOrig;
-
                         $addParentStr = $sub($this->dat, $node->getStartFilePos(), $node->var->getEndFilePos());
 
                         $cl = null;
@@ -183,13 +183,12 @@ $refactorFunc = function(string $dat) use($astParseFunc, $classes): string {
                                     . $sub($this->dat, $node->name->getEndFilePos() + 1, $argSeed->getStartFilePos() - 1)
                                     . $addParentStr . ($dExclAdd !== '-' ? ', ' . $dExclAdd : ')');
                         }
+                    }
 
-                        if ($d !== $dOrig) {
-                            var_dump($dOrig);
-                            var_dump($d);
-                            echo "\n";
-                        }
-
+                    if ($d !== $dOrig) {
+                        var_dump($dOrig);
+                        var_dump($d);
+                        echo "\n";
 
                         $this->dat = substr($this->dat, 0, $node->getStartFilePos())
                                 . $d . substr($this->dat, $node->getEndFilePos() + 1);
