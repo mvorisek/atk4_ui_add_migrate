@@ -5,36 +5,11 @@ namespace Refactor;
 require_once __DIR__ . '/vendor/autoload.php';
 require_once __DIR__ . '/libs.php';
 
-$srcDir = 'C:\sync\wlocal\kelly-atk\mvorisek-php-atk\vendor\mahalux\atk4-ui-cust';
-$destDir = 'C:\Users\mvorisek\Desktop\dequ\atk4_ui\atk4_ui';
+$srcDir = 'C:\Users\mvorisek\Desktop\dequ\ui_src';
+$destDir = 'C:\Users\mvorisek\Desktop\dequ\ui';
 
 // find all classes
-$filesToFix = getDirContentsWithRelKeys($srcDir, '~/(?:\.git|(?<!mvorisek-php-atk/)vendor)/|(?<!/|\.php)(?<!/|\.rst)(?<!/|\.md)$~is', 1);
-$classesAll = array_filter(array_map(function($f) {
-    if (!preg_match('~\.php$~s', $f)) {
-        return [];
-    }
-
-    return discoverClasses($f);
-}, $filesToFix), function($v) { return count($v) > 0; });
-$classes = [];
-foreach ($classesAll as $k => $cls) {
-    if (preg_match('~^src[/\\\\]~', $k)) {
-        foreach ($cls as $cl) {
-            $classes[] = $cl;
-        }
-    }
-}
-
-// find non-unique relative class names
-// ---> not needed to solve, all "function add(" accept "\atk4\ui\" relative or absolute class names only!
-//$clsByRelCl = [];
-//foreach ($classes as $cl) {
-//    $clsByRelCl[preg_replace('~.+\\\\~', '', $cl)][] = $cl;
-//}
-//$clsByRelClNonUnique = array_filter($clsByRelCl, function($v) { return count($v) > 1; });
-//print_r($clsByRelClNonUnique);
-//echo implode('|', array_keys($clsByRelClNonUnique));
+$filesToFix = getDirContentsWithRelKeys($srcDir, '~/(?:\.git|vendor/(?!atk4).*/)/|(?<!/|\.php)(?<!/|\.rst)(?<!/|\.md)$~is', 1);
 
 use PhpParser\Node;
 use PhpParser\NodeTraverser;
@@ -64,6 +39,7 @@ $astParseFunc = function(string $dat): array {
     }
 };
 
+$classes = [];
 $refactorFunc = function(string $dat) use($astParseFunc, $classes): string {
     $runCount = 0;
     do {
@@ -97,14 +73,7 @@ $refactorFunc = function(string $dat) use($astParseFunc, $classes): string {
                 }
                 $this->stack[] = $node;
 
-                if ($node instanceof Node\Stmt\Namespace_) {
-                    $this->ns = implode('\\', $node->name->parts);
-                } elseif ($node instanceof Node\Stmt\Use_) {
-                    foreach ($node->uses as $use) {
-                        $v = $this->normalizeClassName('\\' . implode('\\', $use->name->parts), '\\');
-                        $this->uses[$use->alias !== null ? $use->alias->name : end($use->name->parts)] = $v;
-                    }
-                } elseif ($node instanceof Node\Expr\MethodCall) {
+                if ($node instanceof Node\Expr\New_ && $node->class instanceof Node\Name && preg_match('~exception(?<!ValidationException)$~is', implode('\\', $node->class->parts))) {
                     if ($this->datOrig !== $this->dat) { // always reparse before next modification
                         return;
                     }
@@ -125,83 +94,43 @@ $refactorFunc = function(string $dat) use($astParseFunc, $classes): string {
                     $dOrig = $sub($this->dat, $dOffset, $node->getEndFilePos());
                     $d = $dOrig;
 
-                    if ($node->name->name === 'add') { // there is no other add() method than View::add(), no need to further check
-                        $addParentStr = $sub($this->dat, $node->getStartFilePos(), $node->var->getEndFilePos());
-
-                        $cl = null;
-                        if (count($node->args) > 0) {
-                            $argSeed = $node->args[0]->value;
-
-                            $dExclAddOffset = $argSeed->getStartFilePos();
-                            $dExclAdd = substr($d, $dExclAddOffset - $dOffset);
-                            if (count($node->args) > 1) { // convert $region to $add_args, i.e. wrap 2nd arg in array
-                                $argRegion = $node->args[1]->value;
-                                $dExclAdd = $replaceInside($dExclAdd, $dExclAddOffset, $argRegion->getStartFilePos(), $argRegion->getEndFilePos(), function($parts) {
-                                    return $parts[0] . '[' . $parts[1] . ']' . $parts[2];
-                                });
-                            }
-
-                            $getClFunc = function($n) {
-                                if ($n instanceof Node\Expr\ClassConstFetch) {
-                                    return $this->buildClassName(implode('\\', $n->class->parts), $this->ns);
-                                } else {
-                                    return $this->buildClassName($n->value, $this->ns);
+                    if (count($node->args) > 0 && $node->args[0]->value instanceof Node\Expr\Array_) {
+                        /* @var $exArrArgs Node\Expr\Array_ */
+                        $exArrArgs = $node->args[0]->value;
+                        $msg = null;
+                        $params = [];
+                        foreach ($exArrArgs->items as $item) {
+                            /* @var $item ArrayItem */
+                            if ($item->key === null) {
+                                if ($msg !== null) {
+                                    throw new \Exception('Duplicate message - check code');
                                 }
-                            };
-                            if ($argSeed instanceof Node\Scalar\String_) {
-                                $cl = $getClFunc($argSeed);
-                                $dExclAdd = '[], ' . $replaceInside($dExclAdd, $dExclAddOffset, $argSeed->getStartFilePos(), $argSeed->getEndFilePos(), function($parts) {
-                                    return $parts[0] . preg_replace('~^\s*,\s*~', '', $parts[2]);
-                                });
-
-                                if (count($node->args) === 1) {
-                                    $dExclAdd = '-';
-                                }
-                            } elseif ($argSeed instanceof Node\Expr\Array_ && count($argSeed->items) > 0) {
-                                $i0 = $argSeed->items[0];
-                                $i0Val = $argSeed->items[0]->value;
-                                if ($i0->key == 0 && ($i0Val instanceof Node\Scalar\String_ || $i0Val instanceof Node\Expr\ClassConstFetch)) {
-                                    $cl = $getClFunc($i0Val);
-                                    $dExclAdd = $replaceInside($dExclAdd, $dExclAddOffset, $i0->getStartFilePos(), $i0->getEndFilePos(), function($parts) {
-                                        return $parts[0] . preg_replace('~^\s*,\s*~', '', $parts[2]);
-                                    });
-
-                                    if (count($argSeed->items) === 1 && count($node->args) === 1) {
-                                        $dExclAdd = '-';
-                                    }
-                                }
-                            } elseif ($argSeed instanceof Node\Expr\New_) {
-                                $cl = $this->buildClassName(implode('\\', $argSeed->class->parts), $this->ns);
-                                $dExclAdd = $replaceInside($dExclAdd, $dExclAddOffset, $argSeed->getStartFilePos(), $argSeed->getEndFilePos(), function($parts)
-                                        use(&$cl, $argSeed, $node, $replaceInside, $dExclAdd, $dExclAddOffset) {
-                                    if (count($argSeed->args) === 0) {
-                                        if (count($node->args) === 1) {
-                                            return '-';
-                                        } else {
-                                            $arrSeedStr = '[]';
-                                        }
-                                    } else { // this can break code, but as we are refactoring only add of \atk4\ui\* classes we expect some construtors behaviour
-                                        $arrSeedStr = $replaceInside($dExclAdd, $dExclAddOffset, reset($argSeed->args)->getStartFilePos(), end($argSeed->args)->getEndFilePos(), function($parts) {
-                                            return $parts[1];
-                                        });
-                                        if (!(count($argSeed->args) === 1 && $argSeed->args[0]->value instanceof Node\Expr\Array_)) {
-                                            $arrSeedStr = '[' . $arrSeedStr . ']';
-                                            // $cl = null; return; // debug, do nothing
-                                        }
-                                    }
-
-                                    return $parts[0] . $arrSeedStr . (count($node->args) === 1 ? '' : ', ') . preg_replace('~^\s*,\s*~', '', $parts[2]);
-                                });
+                                $msg = $item->value;
+                            } else {
+                                $params[] = [$item->key, $item->value];
                             }
                         }
 
-                        if ($cl !== null) {
-                            $d = $cl . '::addTo'
-                                    . $sub($this->dat, $node->name->getEndFilePos() + 1, $argSeed->getStartFilePos() - 1)
-                                    . $addParentStr . ($dExclAdd !== '-' ? ', ' . $dExclAdd : ')');
+                        $d = '(new ' . $sub($this->dat, $node->class->getStartFilePos(), $node->class->getEndFilePos());
+                        $d .= '(';
+                        if ($msg !== null) { // there may be no message
+                            $d .= $sub($this->dat, $msg->getStartFilePos(), $msg->getEndFilePos());
+                        }
+                        foreach (array_slice($node->args, 1) as $k => $arg) {
+                            $d .= ($msg !== null || $k > 1 ? ', ' : '') . $sub($this->dat, $arg->getStartFilePos(), $arg->getEndFilePos());
+                        }
+                        $d .= ')';
+                        $d .= ')';
+                        foreach ($params as [$k, $v]) {
+                            $d .= "\n" . '->addMoreInfo('
+                                . $sub($this->dat, $k->getStartFilePos(), $k->getEndFilePos())
+                                . ', '
+                                . $sub($this->dat, $v->getStartFilePos(), $v->getEndFilePos())
+                                . ')';
                         }
                     }
 
+                    // rebuild
                     if ($d !== $dOrig) {
                         var_dump($dOrig);
                         var_dump($d);
@@ -215,46 +144,6 @@ $refactorFunc = function(string $dat) use($astParseFunc, $classes): string {
 
             public function leaveNode(Node $node) {
                 array_pop($this->stack);
-            }
-
-            protected function normalizeClassName(string $name, $prefix = '\\') {
-                require_once __DIR__ . '/../atk4_ui/atk4_ui/vendor/atk4/core/src/FactoryTrait.php';
-                $cl = new class() { use \atk4\core\FactoryTrait; };
-                return trim($cl->normalizeClassName($name, $prefix), '\\');
-            }
-
-            protected function buildClassName(string $name, string $targetNamespace = null, $returnAbs = false): string {
-                if ($name === 'self' || $name === 'static') {
-                    return $name;
-                }
-
-                foreach ($this->uses as $k => $v) {
-                    if (mb_strtolower($name) === mb_strtolower($k)) {
-                        $name = '\\' . $v;
-                        break;
-                    }
-                }
-
-                $fqCl = $this->normalizeClassName($name, '\atk4\ui');
-                if (!isset($this->classes[mb_strtolower($fqCl)])) {
-                    $fqCl = $this->normalizeClassName($name, $targetNamespace);
-                    if (!isset($this->classes[mb_strtolower($fqCl)])) {
-                        throw new \Exception('"' . $name . '" can not be resolved to an UI class');
-                    }
-                }
-                if ($fqCl !== $this->classes[mb_strtolower($fqCl)]) {
-                    throw new \Exception('"' . $name . '" has bad case');
-                }
-                $fqNs = $this->normalizeClassName('\\' . $targetNamespace, '\\');
-
-                foreach ($this->uses as $k => $v) {
-                    if (mb_strtolower($fqCl) === mb_strtolower($v)) {
-                        return $k;
-                    }
-                }
-
-                $relCl = preg_replace('~^' . preg_quote($fqNs, '~') . '\\\\~isu', '', $fqCl);
-                return $returnAbs || $relCl === $fqCl ? '\\' . $fqCl : $relCl;
             }
         };
         $traverser->addVisitor($visitor);
@@ -299,7 +188,7 @@ foreach (array_keys($filesToFix) as $fileRel) {
         }
 
         // fix comments, .md/.rst files
-        $dat = preg_replace_callback('~(?<=^|\n|//)(?: *\*)?\K[^\n]+->add\(.+?\);~isu', function($matches) use($refactorFunc, $dat) {
+        $dat = preg_replace_callback('~(?<=^|\n|//)(?: *\*)?\K[^\n]+new [^\n]*?exception\(\[\(.+?\);~isu', function($matches) use($refactorFunc, $dat) {
             try {
                 $phpHeader = '<?php' . "\n" . (preg_match('~namespace(?:::)? +(atk4\\\\ui[^;\n]*?)(?:;|\n)~', $dat, $nsm) ? 'namespace ' . $nsm[1] . ';' . "\n" : '');
                 return preg_replace('~^' . preg_quote($phpHeader, '~') . '~isu', '', $refactorFunc($phpHeader . $matches[0]), 1);
