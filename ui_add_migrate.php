@@ -111,7 +111,11 @@ $refactorFunc = function(string $dat) use($astParseFunc, $classes): string {
                             }
                         }
 
-                        $d = '(new ' . $sub($this->dat, $node->class->getStartFilePos(), $node->class->getEndFilePos());
+                        $d = '';
+                        if (count($params) > 0) {
+                            $d = '(';
+                        }
+                        $d .= 'new ' . $sub($this->dat, $node->class->getStartFilePos(), $node->class->getEndFilePos());
                         $d .= '(';
                         if ($msg !== null) { // there may be no message
                             $d .= $sub($this->dat, $msg->getStartFilePos(), $msg->getEndFilePos());
@@ -120,7 +124,9 @@ $refactorFunc = function(string $dat) use($astParseFunc, $classes): string {
                             $d .= ($msg !== null || $k > 1 ? ', ' : '') . $sub($this->dat, $arg->getStartFilePos(), $arg->getEndFilePos());
                         }
                         $d .= ')';
-                        $d .= ')';
+                        if (count($params) > 0) {
+                            $d .= ')';
+                        }
                         foreach ($params as [$k, $v]) {
                             $d .= "\n" . '->addMoreInfo('
                                 . $sub($this->dat, $k->getStartFilePos(), $k->getEndFilePos())
